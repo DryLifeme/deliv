@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>منظومة إذن استلام بضاعة - Odoo Delivery Slip</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#084F39">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="إذن استلام بضاعة">
+    <link rel="icon" href="icon-192.png" type="image/png">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <!-- PDF.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* هوية بصرية مستوحاة من طبيعة الشغل: مخازن/لوجستيات ومنتجات "Dry" الصحية،
+               بديل عن الأزرق الافتراضي المعتاد في أدوات الشركات */
+            --ink: #16231F;
+            --primary-color: #0B6E4F;      /* أخضر مطفي عميق (Dry / نظافة) */
+            --primary-dark: #084F39;
+            --accent-color: #B7791F;       /* كهرماني دافئ لعناصر التعديل/الإدخال */
+            --danger-color: #C0392B;
+            --bg-color: #EEF2ED;           /* ورقي بارد هادئ بدل الكريمي المعتاد */
+            --card-bg: #ffffff;
+            --text-color: #23302B;
+            --muted-color: #5B6B63;
+            --border-color: #DCE3DD;
+        }
+
+        * { box-sizing: border-box; font-family: 'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 24px; direction: rtl; }
+        .container { max-width: 1280px; margin: 0 auto; }
+        code, .mono, .item-qty-input, .item-box-input, .receipt-summary, .info-grid, #deliveryRef, #orderRef {
+            font-family: 'IBM Plex Mono', 'Segoe UI', monospace;
+        }
+
+        .header-app {
+            display: flex; align-items: center; gap: 14px;
+            margin-bottom: 22px; padding: 18px 22px;
+            background: var(--primary-dark); color: #fff; border-radius: 12px;
+        }
+        .header-app .mark {
+            width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
+            background: var(--primary-color); display: flex; align-items: center; justify-content: center;
+            font-size: 20px; border: 1px solid rgba(255,255,255,0.25);
+        }
+        .header-app h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: .2px; }
+        .header-app p { margin: 2px 0 0 0; font-size: 12px; opacity: 0.75; }
+
+        .grid-layout { display: grid; grid-template-columns: 460px 1fr; gap: 20px; }
+        @media (max-width: 992px) { .grid-layout { grid-template-columns: 1fr; } }
+
+        .card {
+            background: var(--card-bg); border-radius: 12px; padding: 20px;
+            box-shadow: 0 1px 2px rgba(22,35,31,0.06); border: 1px solid var(--border-color); margin-bottom: 16px;
+        }
+
+        .card-title {
+            display: flex; align-items: center; gap: 9px;
+            font-size: 14.5px; font-weight: 700; color: var(--ink);
+            margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border-color);
+        }
+        .step-badge {
+            width: 24px; height: 24px; border-radius: 50%; background: var(--primary-color); color: #fff;
+            display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
+            font-family: 'IBM Plex Mono', monospace; flex-shrink: 0;
+        }
+
+        .upload-area {
+            border: 1.5px dashed #9FC0AE; border-radius: 10px;
+            padding: 22px; text-align: center; background-color: #F2F8F4; cursor: pointer;
+            color: var(--primary-dark); font-size: 13px; line-height: 1.6; transition: background-color .15s ease;
+        }
+        .upload-area:hover { background-color: #E7F3EB; }
+
+        .form-group { margin-bottom: 11px; }
+        .form-group label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 12px; color: var(--muted-color); }
+        .form-group input {
+            width: 100%; padding: 8px 11px; border: 1px solid var(--border-color); border-radius: 7px;
+            font-size: 13px; color: var(--text-color); background: #FBFCFB;
+        }
+        .form-group input:focus { outline: 2px solid var(--primary-color); outline-offset: 1px; border-color: var(--primary-color); }
+
+        .items-table-input { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        .items-table-input th, .items-table-input td { border: 1px solid var(--border-color); padding: 6px; text-align: center; font-size: 11px; }
+        .items-table-input th { background-color: #F2F5F1; color: var(--muted-color); font-weight: 600; }
+        .items-table-input tbody tr:nth-child(even) { background-color: #FAFBFA; }
+        .items-table-input tbody tr:hover { background-color: #EAF3EC; }
+        .items-table-input td:nth-child(2) { text-align: right; }
+        .item-code-input { font-family: 'IBM Plex Mono', monospace; text-align: center; }
+        .item-name-input { text-align: right; }
+
+        /* قائمة اقتراحات مخصصة لكود الصنف (بديل عن datalist الافتراضي اللي مش قابل للتنسيق) */
+        .code-cell { position: relative; }
+        .suggest-box {
+    position: fixed; 
+    z-index: 500; 
+    background: #fff; 
+    border: 1px solid var(--border-color);
+    border-radius: 8px; 
+    box-shadow: 0 8px 20px rgba(22,35,31,0.14); 
+    max-height: 240px; 
+    overflow-y: auto;
+    display: none; 
+    text-align: right;
+    
+    /* أضف هذا السطر لرفع القائمة للأعلى */
+    transform: translateY(-100%); /* لرفع القائمة بالكامل لتصبح فوق العنصر مباشرة */
+    /* أو استخدم هامش بالسالب للتحكم الدقيق بالبكسل: */
+    margin-top: -50px; 
+    margin-left: -100px; 
+}
+        .suggest-item { padding: 8px 10px; cursor: pointer; font-size: 12px; border-bottom: 1px solid #F0F3EF; display: flex; justify-content: space-between; gap: 8px; }
+        .suggest-item:last-child { border-bottom: none; }
+        .suggest-item:hover, .suggest-item.active { background-color: #EAF3EC; }
+        .suggest-item .s-code { font-family: 'IBM Plex Mono', monospace; color: var(--primary-dark); font-weight: 600; font-size: 11px; white-space: nowrap; }
+        .suggest-item .s-name { color: var(--text-color); }
+        .suggest-empty { padding: 10px; font-size: 12px; color: var(--muted-color); text-align: center; }
+
+        .btn { background-color: var(--primary-color); color: white; border: none; padding: 9px 16px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px; transition: background-color .15s ease; }
+        .btn:hover { background-color: var(--primary-dark); }
+        .btn-success { background-color: var(--primary-dark); }
+        .btn-add { background-color: var(--muted-color); font-size: 11px; padding: 5px 10px; margin-top: 6px; }
+
+        .item-qty-input, .item-box-input {
+            width: 68px; font-size: 14px; font-weight: 600; text-align: center;
+            padding: 6px 4px; border: 1px solid var(--border-color); border-radius: 5px;
+        }
+        .btn-delete-row {
+            color: #ffffff; background-color: var(--danger-color); border: none; border-radius: 6px;
+            width: 30px; height: 28px; cursor: pointer; font-size: 14px; line-height: 1; transition: background-color .15s ease;
+        }
+        .btn-delete-row:hover { background-color: #96271D; }
+
+        /* المستند المطبوع والمعاين — بيفضل شكله رسمي وحيادي زي أي مستند ورقي حقيقي */
+        .receipt-document { background: white; padding: 25px; border: 1px solid #ccc; border-radius: 4px; color: #000; min-height: 550px; }
+        .receipt-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #222; padding-bottom: 12px; margin-bottom: 15px; }
+        .company-info h2 { margin: 0 0 4px 0; font-size: 18px; color: var(--primary-dark); }
+        .doc-title{text-align:center;background:none;border:none;padding:0;}.doc-title img{height:70px;display:block;}
+        
+        .info-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 15px; font-size: 12px;
+            background-color: #f8faf9; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px;
+        }
+
+        .receipt-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+        .receipt-table th, .receipt-table td { border: 1px solid #333; padding: 6px 8px; text-align: center; font-size: 11px; }
+        .receipt-table th { background-color: #F2F5F1; font-weight: bold; }
+
+        .receipt-summary {
+            display: flex; justify-content: space-between; background: #F2F5F1; padding: 8px 12px;
+            border: 1px solid #333; font-weight: bold; font-size: 12px; margin-bottom: 20px;
+        }
+
+        .single-signature {
+            margin-top: 40px;
+            display: flex;
+            justify-content: flex-end;
+        }
+        .signature-box-single {
+            width: 250px;
+            border-top: 1px solid #000;
+            padding-top: 8px;
+            text-align: center;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+
+<!-- قائمة اقتراحات مخصصة لأكواد الأصناف (بدل الـ datalist الافتراضي) -->
+<div id="codeSuggestBox" class="suggest-box"></div>
+
+<div class="container">
+    <div class="header-app">
+        <div class="mark">📦</div>
+        <div>
+            <h1>نظام توليد إذن استلام البضاعة</h1>
+            <p>Dry Life — Odoo Delivery Slip</p>
+        </div>
+    </div>
+
+    <div class="grid-layout">
+        <div>
+            <div class="card">
+                <div class="card-title"><span class="step-badge">1</span> رفع إذن التسليم (PDF)</div>
+                <div class="upload-area" onclick="document.getElementById('pdfInput').click()">
+                    📂 اضغط هنا لإرفاق ملف أو أكثر Delivery Slip (يمكنك اختيار عدة ملفات معاً أو رفعها واحد تلو الآخر، وسيتم تجميع كل الأصناف تلقائياً)
+                    <input type="file" id="pdfInput" accept="application/pdf" multiple onchange="handleFileSelect(event)">
+                    <div id="fileName" style="margin-top: 6px; font-weight: bold; color: var(--secondary-color); font-size: 12px;"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title"><span class="step-badge">2</span> البيانات المستخرجة والإدخال</div>
+                <div class="form-group">
+                    <label>اسم العميل (Customer):</label>
+                    <input type="text" id="customerName" placeholder="اسم العميل" oninput="updatePreview()">
+                </div>
+                <div class="form-group">
+                    <label>عنوان التسليم (Delivery Address):</label>
+                    <input type="text" id="customerAddress" placeholder="العنوان التفصيلي" oninput="updatePreview()">
+                </div>
+                <div class="form-group" style="display: flex; gap: 8px;">
+                    <div style="flex:1;">
+                        <label>تاريخ الاستلام:</label>
+                        <input type="date" id="receiptDate" onchange="updatePreview()">
+                    </div>
+                    <div style="flex:1;">
+                        <label>رقم إذن التسليم:</label>
+                        <input type="text" id="deliveryRef" placeholder="مثال: 05914" oninput="updatePreview()">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>رقم الأمر (Order):</label>
+                    <input type="text" id="orderRef" placeholder="S12345" oninput="updatePreview()">
+                </div>
+
+                <div class="form-group">
+                    <label>جدول المنتجات (اكتب الكود يظهر الاسم بالعربي):</label>
+                    <div style="max-height: 300px; overflow-y: auto;">
+                        <table class="items-table-input">
+                            <thead>
+                                <tr>
+                                    <th style="width: 70px;">الكود</th>
+                                    <th>اسم الصنف (بالعربي)</th>
+                                    <th style="width: 78px;">وحدة</th>
+                                    <th style="width: 78px;">كرتونة</th>
+                                    <th style="width: 40px;">حذف</th>
+                                </tr>
+                            </thead>
+                            <tbody id="itemsTableBody"></tbody>
+                        </table>
+                    </div>
+                    <button class="btn btn-add" onclick="addNewRow()">+ إضافة صنف يدوي</button>
+                    <div style="margin-top:6px; font-size:11px; color:#718096;">🗑️ لحذف أي صنف (سواء استخرجه النظام تلقائياً أو أضفته يدوياً) اضغط على أيقونة سلة المهملات الحمراء في نهاية صف الصنف.</div>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <div class="card" style="position: sticky; top: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <div class="card-title" style="margin: 0; border: none;"><span class="step-badge">3</span> معاينة إذن الاستلام المنسق</div>
+                    <button class="btn btn-success" onclick="printReceipt()">🖨️ طباعة الإذن</button>
+                </div>
+
+                <!-- المستند القابل للطباعة -->
+                <div class="receipt-document" id="printableReceipt">
+                    <div class="receipt-header">
+                        <div class="company-info">
+                            <h2>إذن تسليم بضاعة</h2>
+                            <span style="font-size: 11px; color: #555;">قسم اللوجستيات والمخازن</span>
+                        </div>
+                        <div class="doc-title" style="background:none;border:none;padding:0;"><img src="data:image/jpeg;base64,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" style="height:70px;"></div>
+                        <div style="text-align: left; font-size: 11px;">
+                            <strong>رقم الإذن:</strong> <span id="prevDeliveryRef">--</span><br>
+                            <strong>أمر البيع:</strong> <span id="prevOrderRef">--</span><br>
+                            <strong>تاريخ الاستلام:</strong> <span id="prevDate">--</span>
+                        </div>
+                    </div>
+
+                    <div class="info-grid">
+                        <div><strong>اسم العميل:</strong> <span id="prevCustomer" style="font-weight: bold;">--</span></div>
+                        <div><strong>تاريخ الاستلام:</strong> <span id="prevReceiptDate">--</span></div>
+                        <div style="grid-column: span 2;"><strong>عنوان التسليم:</strong> <span id="prevAddress">--</span></div>
+                    </div>
+
+                    <table class="receipt-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 30px;">#</th>
+                                <th style="width: 70px;">كود الصنف</th>
+                                <th>اسم الصنف / البيان التفصيلي</th>
+                                <th style="width: 80px;">الكمية (وحدة)</th>
+                                <th style="width: 80px;">عدد الكراتين</th>
+                                <th style="width: 90px;">ملاحظات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="prevItemsBody">
+                            <tr><td colspan="6" style="color: #888;">يرجى رفع ملف الـ PDF لاستخراج الأصناف</td></tr>
+                        </tbody>
+                    </table>
+
+                    <div class="receipt-summary">
+                        <span>إجمالي عدد الكراتين (Total Boxes): <span id="totalBoxesCount">0</span> كرتونة</span>
+                        <span>إجمالي عدد الوحدات (Total Units): <span id="totalUnitsCount">0</span> قطعة</span>
+                    </div>
+
+                    <div style="font-size: 11px; margin-top: 15px; line-height: 1.5;">
+                        * أقر أنا الموقّع أدناه بأنني استلمت الأصناف والكراتين الموضحة أعلاه كاملة وبحالة جيدة ومطابقة للطلب.
+                    </div>
+
+                    <div class="single-signature">
+                        <div class="signature-box-single">
+                            <strong>توقيع المستلم (العميل)</strong><br><br>
+                            الاسم: .......................................<br><br>
+                            التوقيع: ...................................
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+    // قاعدة بيانات الـ 48 صنف بالكامل مع الأكواد والترجمة العربية
+    const PRODUCT_DATABASE = [
+      { "code": "13320", "eng": "Dry Cool Mama, After Birth Intimate Foam 150 ML", "ar": "دراي كول ماما - فوم صحي للمناطق الحميمية لبعد الولادة 150 مل" },
+      { "code": "13624", "eng": "Dry Daily Fresh Flowers, 40 +12 FREE Pads+ 4 FREE Wipes", "ar": "دراي دايلي انتعاش الأزهار - فوط يومية عادي 40 + 12 مجاناً + 4 وايبس مجاناً" },
+      { "code": "13212", "eng": "Dry Daily Fresh Flowers, Normal, 20 Pads", "ar": "دراي دايلي انتعاش الأزهار - فوط يومية عادي 20 فوطة" },
+      { "code": "13317", "eng": "Dry Daily Fresh, Normal, 20 Pads Mixed Flowers and Original, 24 Packs + 1 Gift", "ar": "دراي دايلي انتعاش الأزهار والعادي - 20 فوطة (عرض 24 + 1 هدية)" },
+      { "code": "13318", "eng": "Dry Daily Fresh, Normal, 40 +12 FREE Pads+ 4 FREE Wipes Mixed Flowers and Original, 12 Packs + 1 Gift", "ar": "دراي دايلي انتعاش الأزهار والعادي - 40 + 12 مجاناً + 4 وايبس (عرض 12 + 1 هدية)" },
+      { "code": "13211", "eng": "Dry Daily Normal, 20 Pads", "ar": "دراي دايلي عادي - فوط يومية 20 فوطة" },
+      { "code": "13623", "eng": "Dry Daily Normal, 40 +12 FREE Pads+ 4 FREE Wipes", "ar": "دراي دايلي عادي - فوط يومية 40 + 12 مجاناً + 4 وايبس مجاناً" },
+      { "code": "13314", "eng": "Dry Fresh Feminine Wash, 200 ML Mixed flowers and Musk, 12 Packs + 1 Gift", "ar": "دراي فريش غسول نسائي للمناطق الحميمية - 200 مل أزهار ومسك (عرض 12 + 1 هدية)" },
+      { "code": "13202", "eng": "Dry Fresh Feminine Wash, Flowers 200 ML", "ar": "دراي فريش غسول نسائي للمناطق الحميمية - انتعاش الأزهار 200 مل" },
+      { "code": "13201", "eng": "Dry Fresh Feminine Wash, Musk 200 ML", "ar": "دراي فريش غسول نسائي للمناطق الحميمية - المسك 200 مل" },
+      { "code": "13315", "eng": "Dry Fresh Feminine Wipes, 20 wipes Mixed Flowers and Musk, 12 Packs + 1 Gift", "ar": "دراي فريش مناديل مبللة للمناطق الحميمية - 20 منديل أزهار ومسك (عرض 12 + 1 هدية)" },
+      { "code": "13204", "eng": "Dry Fresh Feminine Wipes, Flowers 20 wipes", "ar": "دراي فريش مناديل مبللة للمناطق الحميمية - انتعاش الأزهار 20 منديل" },
+      { "code": "13203", "eng": "Dry Fresh Feminine Wipes, Musk 20 wipes", "ar": "دراي فريش مناديل مبللة للمناطق الحميمية - المسك 20 منديل" },
+      { "code": "13316", "eng": "Dry Fresh Foam, 150 ML Mixed Flowers and Musk, 15 Packs + 1 Gift", "ar": "دراي فريش رغوة غسول للمناطق الحميمية - 150 مل أزهار ومسك (عرض 15 + 1 هدية)" },
+      { "code": "13209", "eng": "Dry Fresh Foam, Flowers 150 ML", "ar": "دراي فريش رغوة غسول للمناطق الحميمية - انتعاش الأزهار 150 مل" },
+      { "code": "13210", "eng": "Dry Fresh Foam, Musk 150 ML", "ar": "دراي فريش رغوة غسول للمناطق الحميمية - المسك 150 مل" },
+      { "code": "13304", "eng": "Dry Go Disposable Panties, 5 Pieces, Size 2XL", "ar": "دراي جو ملابس صحية داخلية - 5 قطع مقاس 2XL" },
+      { "code": "13305", "eng": "Dry Go Disposable Panties, 5 Pieces, Size 3XL", "ar": "دراي جو ملابس صحية داخلية - 5 قطع مقاس 3XL" },
+      { "code": "13306", "eng": "Dry Go Disposable Panties, 5 Pieces, Size 4XL", "ar": "دراي جو ملابس صحية داخلية - 5 قطع مقاس 4XL" },
+      { "code": "13302", "eng": "Dry Go Disposable Panties, 6 Pieces, Size L", "ar": "دراي جو ملابس صحية داخلية - 6 قطع مقاس L" },
+      { "code": "13301", "eng": "Dry Go Disposable Panties, 6 Pieces, Size M", "ar": "دراي جو ملابس صحية داخلية - 6 قطع مقاس M" },
+      { "code": "13303", "eng": "Dry Go Disposable Panties, 6 Pieces, Size XL", "ar": "دراي جو ملابس صحية داخلية - 6 قطع مقاس XL" },
+      { "code": "13313", "eng": "Dry Go Disposable Panties, Mixed Sizes, 20 Packs + 1 Gift", "ar": "دراي جو ملابس صحية داخلية - مقاسات مشكلة (عرض 20 + 1 هدية)" },
+      { "code": "13324", "eng": "Dry Go Disposable Panties, Mixed Sizes, 40 Packs + 4 Gift", "ar": "دراي جو ملابس صحية داخلية - مقاسات مشكلة (عرض 40 + 4 هدية)" },
+      { "code": "13325", "eng": "Dry Go Disposable Panties, Mixed Sizes, 60 Packs + 6 Gift", "ar": "دراي جو ملابس صحية داخلية - مقاسات مشكلة (عرض 60 + 6 هدية)" },
+      { "code": "13622", "eng": "Dry Maxi Aloe Vera, MEGA SAVE, 20+6 Pads, EXTRA LONG", "ar": "دراي ماكسي ألوفيرا فوط صحية سميكة - ميجا توفير 20 + 6 فوط مقاس طويل جداً" },
+      { "code": "13608", "eng": "Dry Maxi Musk, SAVING PACK 14 Pads, EXTRA LONG", "ar": "دراي ماكسي المسك فوط صحية سميكة - عبوة التوفير 14 فوطة مقاس طويل جداً" },
+      { "code": "13620", "eng": "Dry Maxi Musk, SAVING PACK 14+3 Gift Pads, LONG", "ar": "دراي ماكسي المسك فوط صحية سميكة - عبوة التوفير 14 + 3 فوط هدية مقاس طويل" },
+      { "code": "13611", "eng": "Dry Maxi Thick Pads, 8 Pads, EXTRA LONG", "ar": "دراي ماكسي فوط صحية سميكة - 8 فوط مقاس طويل جداً" },
+      { "code": "13601", "eng": "Dry Maxi Thick Pads, 9 Pads, LONG", "ar": "دراي ماكسي فوط صحية سميكة - 9 فوط مقاس طويل" },
+      { "code": "13617", "eng": "Dry Maxi, MIXED SPECIAL OFFER, 28 Pads, EXTRA LONG", "ar": "دراي ماكسي عرض خاص مختلط (مسك وبدون) - 28 فوطة مقاس طويل جداً" },
+      { "code": "13634", "eng": "Dry Maxi, MIXED SPECIAL OFFER, 28 Pads, EXTRA LONG", "ar": "دراي ماكسي عرض خاص مختلط (مسك وبدون) - 28 فوطة كرتونة 12 عرض" },
+      { "code": "13614", "eng": "Dry Maxi, SAVING PACK 14 Pads, EXTRA LONG", "ar": "دراي ماكسي فوط صحية سميكة - عبوة التوفير 14 فوطة مقاس طويل جداً" },
+      { "code": "13319", "eng": "Dry Maxi, SAVING PACK 14 Pads, EXTRA LONG, Mixed", "ar": "دراي ماكسي فوط صحية سميكة - عبوة التوفير 14 فوطة مقاس طويل جداً مشكل (عرض 12 + 1 هدية)" },
+      { "code": "13401", "eng": "Dry Post After Birth & Sever Bleeding 10 Pads", "ar": "دراي بوست فوط صحية لبعد الولادة وحالات النزيف الشديد 10 فوط" },
+      { "code": "13605", "eng": "Dry Ultra - Thin, SAVING PACK, 14 pads, EXTRA LONG", "ar": "دراي ألترا فوط صحية رفيعة - عبوة التوفير 14 فوطة مقاس طويل جداً" },
+      { "code": "13613", "eng": "Dry Ultra - Thin, SAVING PACK, 14 pads, LONG", "ar": "دراي ألترا فوط صحية رفيعة - عبوة التوفير 14 فوطة مقاس طويل" },
+      { "code": "13619", "eng": "Dry Ultra Fresh Flowers, 14 pads, EXTRA LONG", "ar": "دراي ألترا انتعاش الأزهار فوط صحية رفيعة - 14 فوطة مقاس طويل جداً" },
+      { "code": "13618", "eng": "Dry Ultra Fresh Flowers, 14 pads, LONG", "ar": "دراي ألترا انتعاش الأزهار فوط صحية رفيعة - 14 فوطة مقاس طويل" },
+      { "code": "13322", "eng": "Dry Ultra Fresh, 14 pads, EXTRA LONG Mixed Flowers", "ar": "دراي ألترا انتعاش الأزهار والعادي - 14 فوطة مقاس طويل جداً (عرض 24 + 1 هدية)" },
+      { "code": "13323", "eng": "Dry Ultra Fresh, 14 pads, LONG Mixed Flowers", "ar": "دراي ألترا انتعاش الأزهار والعادي - 14 فوطة مقاس طويل (عرض 24 + 1 هدية)" },
+      { "code": "33301", "eng": "Dry Post 10 Pads", "ar": "دراي بوست - فوط صحية لبعد الولادة 10 فوط" },
+      { "code": "33502", "eng": "Dry Ultra Thin Extra Long 14 Pads", "ar": "دراي ألترا - فوط صحية رفيعة مقاس طويل جداً عبوة التوفير 14 فوطة" },
+      { "code": "33504", "eng": "Dry Ultra Thin Flowers Extra Long 14 Pads", "ar": "دراي ألترا - فوط صحية رفيعة بالأزهار مقاس طويل جداً عبوة التوفير 14 فوطة" },
+      { "code": "33401", "eng": "Dry Maxi Thick Extra Long 14 Pads", "ar": "دراي ماكسي - فوط صحية سميكة مقاس طويل جداً عبوة التوفير 14 فوطة" },
+      { "code": "33402", "eng": "Dry Maxi Musk Extra Long 14 Pads", "ar": "دراي ماكسي المسك - فوط صحية سميكة مقاس طويل جداً عبوة التوفير 14 فوطة" },
+      { "code": "33431", "eng": "Dry Maxi Musk Long 14+3 Pads", "ar": "دراي ماكسي المسك - فوط صحية سميكة مقاس طويل 14 + 3 فوط هدية" },
+      { "code": "33421", "eng": "Dry Maxi Thick Long 9 Pads", "ar": "دراي ماكسي - فوط صحية سميكة مقاس طويل 9 فوط" }
+    ];
+
+    // تهيئة القيم الافتراضية عند فتح الصفحة
+    window.onload = function() {
+        document.getElementById('receiptDate').valueAsDate = new Date();
+        addNewRow();
+    };
+
+    let hasImportedAnyPDF = false; // أول ملف PDF يتم استيراده يمسح الصف الفارغ الافتراضي فقط
+
+    async function handleFileSelect(event) {
+        const files = Array.from(event.target.files || []);
+        const pdfFiles = files.filter(f => f.type === 'application/pdf');
+        if (pdfFiles.length === 0) return;
+
+        document.getElementById('fileName').innerText =
+            pdfFiles.length === 1 ? ('📄 ' + pdfFiles[0].name) : ('📄 ' + pdfFiles.length + ' ملفات: ' + pdfFiles.map(f => f.name).join('، '));
+
+        for (const file of pdfFiles) {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+            let allTextItems = [];
+            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                const page = await pdf.getPage(pageNum);
+                const textContent = await page.getTextContent();
+
+                textContent.items.forEach(item => {
+                    allTextItems.push({
+                        text: item.str,
+                        x: item.transform[4],
+                        y: item.transform[5],
+                        width: item.width || 0,
+                        page: pageNum
+                    });
+                });
+            }
+
+            parseDynamicOdooPDF(allTextItems);
+        }
+
+        // يسمح برفع نفس الملفات تاني بعدين لو حبيت تضيفها مرة أخرى
+        event.target.value = '';
+    }
+
+    // --- إصلاح النص العربي المستخرج من PDF ---
+    // ملفات الـ PDF غالباً تخزن الحروف العربية بترتيب بصري معكوس (حرف حرف)، وكمان
+    // بعض الحروف بتيجي بأشكال العرض الخاصة بيها (Presentation Forms) مش بالشكل القياسي,
+    // فبنجمع الحروف المتجاورة في "كلمات" حسب المسافة الحقيقية بينها (مش علامة المسافة
+    // الظاهرة في الملف لأنها مش موثوقة), ونعكس ترتيب الكلمات + ترتيب الحروف العربية
+    // جوه كل كلمة، مع الحفاظ على أي جزء إنجليزي/أرقام كما هو من غير ما ننعكسه.
+    const ARABIC_CLASS = '\\u0600-\\u06FF\\u0750-\\u077F\\uFB50-\\uFDFF\\uFE70-\\uFEFF';
+    const ARABIC_TEST_RE = new RegExp('[' + ARABIC_CLASS + ']');
+    const ARABIC_RUN_RE = new RegExp('[' + ARABIC_CLASS + ']+|[^' + ARABIC_CLASS + ']+', 'g');
+    const RTL_GAP_THRESHOLD = 1.5;
+
+    function isArabicText(s) { return ARABIC_TEST_RE.test(s); }
+
+    function fixMixedRtlToken(tok) {
+        const runs = tok.match(ARABIC_RUN_RE) || [];
+        let arabicPart = '';
+        let otherPart = '';
+        runs.forEach(r => {
+            if (isArabicText(r)) arabicPart += r.split('').reverse().join('');
+            else otherPart += r;
+        });
+        return arabicPart + otherPart;
+    }
+
+    function fixRtlLineFromItems(sortedItems) {
+        const visible = sortedItems.filter(i => i.text !== '' && i.text !== ' ');
+        const words = [];
+        let buffer = '';
+        let prevEnd = null;
+
+        visible.forEach(it => {
+            const gap = prevEnd === null ? 0 : (it.x - prevEnd);
+            if (prevEnd !== null && gap > RTL_GAP_THRESHOLD) {
+                words.push(buffer);
+                buffer = '';
+            }
+            buffer += it.text;
+            prevEnd = it.x + (it.width || 0);
+        });
+        if (buffer) words.push(buffer);
+
+        const fixedWords = words.map(fixMixedRtlToken);
+        return fixedWords.reverse().join(' ').normalize('NFKC').replace(/\s+/g, ' ').trim();
+    }
+
+    function appendRefValue(fieldId, newValue) {
+        const el = document.getElementById(fieldId);
+        const existing = el.value.split(',').map(s => s.trim()).filter(Boolean);
+        if (!existing.includes(newValue)) {
+            existing.push(newValue);
+            el.value = existing.join(', ');
+        }
+    }
+
+    // سطر بالكامل إنجليزي/أرقام: ترتيبه الأصلي (يسار->يمين) صحيح فعلاً، ما ينفعش
+    // نطبّق عليه منطق "عكس ترتيب الكلمات" (ده مخصص للسطور العربية/المختلطة اللي
+    // بتتخزن بترتيب بصري RTL جوه ملف الـ PDF). تطبيقه غلط على سطر إنجليزي بحت
+    // كان بيبعثر ترتيب كلمات اسم المنتج الإنجليزي.
+    function fixLineTextFromItems(sortedItems) {
+        const visible = sortedItems.filter(i => i.text !== '' && i.text !== ' ');
+        if (visible.length === 0) return '';
+        const rawJoined = visible.map(i => i.text).join(' ').replace(/\s+/g, ' ').trim();
+        if (!isArabicText(rawJoined)) return rawJoined;
+        return fixRtlLineFromItems(sortedItems);
+    }
+
+    // --- تجميع عناصر النص في "صفحات وسطور" (بدل خلطهم كلهم في مصفوفة واحدة) ---
+    // العنصر الأصلي كان بيجمّع كل الأسطر من كل الصفحات في نفس الخريطة معتمداً على
+    // إحداثي Y بس، وده كان بيسبب تصادم لو نفس قيمة Y اتكررت في صفحة تانية (كل صفحة
+    // PDF بتبدأ إحداثياتها من الصفر)، فبيحصل خلط بيانات بين صفوف من صفحات مختلفة.
+    function buildPagesLines(items) {
+        const byPage = {};
+        items.forEach(item => {
+            if (!byPage[item.page]) byPage[item.page] = {};
+            const yKey = Math.round(item.y / 3) * 3;
+            if (!byPage[item.page][yKey]) byPage[item.page][yKey] = [];
+            byPage[item.page][yKey].push(item);
+        });
+
+        const pageNums = Object.keys(byPage).map(Number).sort((a, b) => a - b);
+        return pageNums.map(pn => {
+            const yKeys = Object.keys(byPage[pn]).map(Number).sort((a, b) => b - a);
+            const lines = yKeys.map(yk => {
+                const rowItems = byPage[pn][yk].slice().sort((a, b) => a.x - b.x);
+                return { items: rowItems, text: rowItems.map(i => i.text).join(' ') };
+            });
+            return { pageNum: pn, lines };
+        });
+    }
+
+    function flattenPagesToGlobalLines(pages) {
+        const lineItemArrays = [];
+        pages.forEach(p => p.lines.forEach(l => lineItemArrays.push(l.items)));
+        const fullLines = lineItemArrays.map(arr => arr.map(i => i.text).join(' '));
+        return { fullLines, lineItemArrays };
+    }
+
+    // نهاية جدول الأصناف (تذييل الصفحة / خانات التوقيع) — أي سطر بعده يتجاهل
+    const TABLE_END_RE = /Company Report Footer|Page:\s*\d+\s*\/\s*\d+|مسؤول المخازن|توقيع المستلم|Storekeeper Signature|Receiver Signature|^\.{5,}$/;
+
+    // بيدوّر على مواقع رؤوس الأعمدة (ORDERED / DELIVERED / HS) في سطر العنوان عشان
+    // نحدد حدود كل عمود، وبيها بنوزّع كل عنصر نص في الجدول على العمود الصح بتاعه
+    // (المنتج / المطلوب / المُسلَّم / كود HS) - بدل الاعتماد على Regex واحد بيدوّر
+    // في نص السطر ككل وممكن يخلط قيم عمودين مع بعض.
+    function findColumnBounds(headerLine) {
+        let orderedX = null, deliveredX = null, hsX = null;
+        headerLine.items.forEach(it => {
+            const t = it.text.trim();
+            if (t === 'ORDERED') orderedX = it.x;
+            else if (t === 'DELIVERED') deliveredX = it.x;
+            else if (t === 'HS' || t.startsWith('HS ') || t === 'HS CODE') hsX = it.x;
+        });
+        if (orderedX === null || deliveredX === null || hsX === null) return null;
+        return {
+            productMax: orderedX - 27,
+            orderedMax: deliveredX - 18,
+            deliveredMax: hsX - 21
+        };
+    }
+
+    function classifyColumn(x, bounds) {
+        if (x < bounds.productMax) return 'product';
+        if (x < bounds.orderedMax) return 'ordered';
+        if (x < bounds.deliveredMax) return 'delivered';
+        return 'hs';
+    }
+
+    // الاستخراج الأساسي: بيعتمد على تقسيم كل صفحة لأعمدة (بدل سطور مسطحة)، وبيستخدم
+    // ظهور كود HS (رقم من 6 خانات فأكتر في عمود HS) كعلامة بداية صنف جديد؛ أي سطور
+    // بعده لحد ما نلاقي كود HS تاني بتتحسب استكمال لنفس الصنف (بيحصل لما اسم الصنف
+    // أو عدد الكراتين يلفّ على أكتر من سطر).
+    function extractProductRowsByColumns(pages) {
+        const parsedProducts = [];
+        const HS_RE = /^\d{6,}$/;
+        const qtyRe = /(\d[\d,.]*)\s*Units?/i;
+        const boxRe = /\(\s*(\d+)\s*Box/i;
+
+        pages.forEach(page => {
+            const lines = page.lines;
+            let headerIdx = -1, bounds = null;
+            for (let i = 0; i < lines.length; i++) {
+                const t = lines[i].text;
+                if (/PRODUCT/i.test(t) && /ORDERED/i.test(t) && /DELIVERED/i.test(t)) {
+                    const b = findColumnBounds(lines[i]);
+                    if (b) { headerIdx = i; bounds = b; break; }
+                }
+            }
+            if (headerIdx === -1 || !bounds) return; // لا يوجد جدول أصناف بهذا الشكل في الصفحة
+
+            const tableLines = [];
+            for (let i = headerIdx + 1; i < lines.length; i++) {
+                if (TABLE_END_RE.test(lines[i].text.trim())) break;
+                tableLines.push(lines[i]);
+            }
+
+            const classifiedLines = tableLines.map(line => {
+                const cols = { product: [], ordered: [], delivered: [], hs: [] };
+                line.items.forEach(it => {
+                    if (it.text.trim() === '') return;
+                    cols[classifyColumn(it.x, bounds)].push(it);
+                });
+                return cols;
+            });
+
+            const blocks = [];
+            let currentBlock = null;
+            classifiedLines.forEach(cols => {
+                const hsItem = cols.hs.find(it => HS_RE.test(it.text.trim()));
+                if (hsItem) {
+                    currentBlock = { lines: [cols] };
+                    blocks.push(currentBlock);
+                } else if (currentBlock) {
+                    currentBlock.lines.push(cols);
+                }
+            });
+
+            blocks.forEach(block => {
+                const productParts = [], orderedParts = [], deliveredParts = [];
+                block.lines.forEach(cols => {
+                    if (cols.product.length) {
+                        const fixed = fixLineTextFromItems(cols.product.slice().sort((a, b) => a.x - b.x));
+                        if (fixed) productParts.push(fixed);
+                    }
+                    if (cols.ordered.length) {
+                        orderedParts.push(cols.ordered.slice().sort((a, b) => a.x - b.x).map(i => i.text).join(' '));
+                    }
+                    if (cols.delivered.length) {
+                        deliveredParts.push(cols.delivered.slice().sort((a, b) => a.x - b.x).map(i => i.text).join(' '));
+                    }
+                });
+
+                const productText = productParts.join(' ').replace(/\s+/g, ' ').trim();
+                const orderedText = orderedParts.join(' ');
+                const deliveredText = deliveredParts.join(' ');
+
+                // نفضّل قيمة "المُسلَّم"، ولو مش موجودة (نادراً) نرجع لقيمة "المطلوب"
+                const deliveredQty = deliveredText.match(qtyRe);
+                const orderedQty = orderedText.match(qtyRe);
+                const chosenQty = deliveredQty || orderedQty;
+                if (!chosenQty) return;
+                const pUnits = parseFloat(chosenQty[1].replace(/,/g, ''));
+                if (!pUnits || pUnits <= 0) return;
+
+                const deliveredBox = deliveredText.match(boxRe);
+                const orderedBox = orderedText.match(boxRe);
+                const chosenBox = deliveredBox || orderedBox;
+                const pBoxes = chosenBox ? parseInt(chosenBox[1]) : '';
+
+                let foundCode = "", foundArabicName = "";
+                const cleanProductText = productText.toLowerCase().replace(/[^a-z0-9]/g, '');
+                for (const dbItem of PRODUCT_DATABASE) {
+                    let isMatch = productText.includes(dbItem.code);
+                    if (!isMatch) {
+                        const cleanEng = dbItem.eng.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        if (cleanEng && cleanProductText.includes(cleanEng)) isMatch = true;
+                    }
+                    if (isMatch) {
+                        foundCode = dbItem.code;
+                        foundArabicName = dbItem.ar;
+                        break;
+                    }
+                }
+
+                if (!foundArabicName) {
+                    foundArabicName = productText.length > 2 ? productText : 'صنف غير معروف (يرجى المراجعة)';
+                }
+
+                parsedProducts.push({
+                    code: foundCode,
+                    name: foundArabicName,
+                    units: Math.round(pUnits),
+                    boxes: pBoxes
+                });
+            });
+        });
+
+        return parsedProducts;
+    }
+
+    // خطة احتياطية (الطريقة القديمة القائمة على السطور فقط) تُستخدم فقط لو تعذّر
+    // تحديد أعمدة الجدول بالطريقة الجديدة (مثلاً قالب PDF مختلف تماماً عن المعتاد)
+    function extractProductRowsLegacy(fullLines) {
+        const qtyLineRegex = /(\d[\d,.]*)\s*Units?(?:\s*\(\s*(\d+))?/gi;
+        const parsedProducts = [];
+
+        fullLines.forEach((line, idx) => {
+            if (/PRODUCT/i.test(line) && /ORDERED/i.test(line)) return;
+
+            const matches = [...line.matchAll(qtyLineRegex)];
+            if (matches.length === 0) return;
+
+            const chosen = matches[matches.length - 1];
+            const pUnits = parseFloat(chosen[1].replace(/,/g, ''));
+            const boxMatch = chosen[2] ? chosen : matches.find(m => m[2]);
+            const pBoxes = boxMatch ? parseInt(boxMatch[2]) : '';
+            if (!pUnits || pUnits <= 0) return;
+
+            const windowStart = idx;
+            const windowEnd = Math.min(fullLines.length - 1, idx + 3);
+
+            let foundCode = "", foundArabicName = "", bestDistance = Infinity;
+
+            for (let li = windowStart; li <= windowEnd; li++) {
+                const lineText = fullLines[li];
+                const cleanLine = lineText.toLowerCase().replace(/[^a-z0-9]/g, '');
+                PRODUCT_DATABASE.forEach(dbItem => {
+                    let isMatch = lineText.includes(dbItem.code);
+                    if (!isMatch) {
+                        const cleanEng = dbItem.eng.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        if (cleanEng && cleanLine.includes(cleanEng)) isMatch = true;
+                    }
+                    if (isMatch) {
+                        const distance = Math.abs(li - idx);
+                        if (distance < bestDistance) {
+                            bestDistance = distance;
+                            foundCode = dbItem.code;
+                            foundArabicName = dbItem.ar;
+                        }
+                    }
+                });
+            }
+
+            if (!foundArabicName) {
+                let rawText = line.replace(qtyLineRegex, ' ')
+                    .replace(/PRODUCT|ORDERED|DELIVERED|HS CODE|WH\/OUT\/\d+|S\d+|Box\)|\d{8,}/gi, '')
+                    .trim();
+                rawText = rawText.replace(/^[\s\-\d\.\:]+/, '').trim();
+                foundArabicName = rawText.length > 2 ? rawText : 'صنف غير معروف (يرجى المراجعة)';
+            }
+
+            parsedProducts.push({ code: foundCode, name: foundArabicName, units: Math.round(pUnits), boxes: pBoxes });
+        });
+
+        return parsedProducts;
+    }
+
+    function parseDynamicOdooPDF(items) {
+        const pages = buildPagesLines(items);
+        const { fullLines, lineItemArrays } = flattenPagesToGlobalLines(pages);
+        const fullText = fullLines.join('\n');
+
+        // 1. رقم الإذن والأمر (لو رفعت أكتر من ملف، بيتم تجميع كل الأرقام مع بعض بفاصلة)
+        const whMatch = fullText.match(/WH\/OUT\/(\d+)/i);
+        if (whMatch) appendRefValue('deliveryRef', whMatch[1]);
+
+        const orderMatch = fullText.match(/S\d{4,6}/i);
+        if (orderMatch) appendRefValue('orderRef', orderMatch[0]);
+
+        // 2. العميل والعنوان (بيتم تعبئتهم من أول ملف فيه البيانات دي بس، عشان لو رفعت
+        // كذا إذن لنفس العميل ما يتكررش أو يتغير الاسم من غير داعي)
+        let customerLineIdx = -1;
+        for (let i = 0; i < fullLines.length; i++) {
+            if (fullLines[i].includes('Delivery Address:') || fullLines[i].includes('Customer:')) {
+                customerLineIdx = i;
+                break;
+            }
+        }
+        if (customerLineIdx !== -1) {
+            const customerEl = document.getElementById('customerName');
+            const addressEl = document.getElementById('customerAddress');
+            if (!customerEl.value.trim() && lineItemArrays[customerLineIdx + 1]) {
+                customerEl.value = fixRtlLineFromItems(lineItemArrays[customerLineIdx + 1])
+                    .replace(/Page:|\d\/\d/g, '').trim();
+            }
+            if (!addressEl.value.trim()) {
+                const addr1 = lineItemArrays[customerLineIdx + 2] ? fixRtlLineFromItems(lineItemArrays[customerLineIdx + 2]) : '';
+                const addr2 = lineItemArrays[customerLineIdx + 3] ? fixRtlLineFromItems(lineItemArrays[customerLineIdx + 3]) : '';
+                addressEl.value = (addr1 + ' ' + addr2)
+                    .replace(/Company Report Footer|Page:|\d\/\d/g, '')
+                    .replace(/\baddress\b/gi, '')
+                    .replace(/\s+/g, ' ')
+                    .replace(/\s*,\s*/g, ', ')
+                    .trim();
+            }
+        }
+
+        // 3. استخراج الأصناف: طريقة الأعمدة أولاً (الأدق)، ولو فشلت تماماً (قالب مختلف)
+        // نرجع للطريقة القديمة القائمة على السطور كخطة احتياطية
+        let parsedProducts = extractProductRowsByColumns(pages);
+        if (parsedProducts.length === 0) {
+            parsedProducts = extractProductRowsLegacy(fullLines);
+        }
+
+        if (parsedProducts.length > 0) {
+            if (!hasImportedAnyPDF) {
+                // أول استيراد فعلي: نمسح الصف الفارغ الافتراضي بس (مش أي بيانات اتضافت يدوي قبل كده)
+                const tbody = document.getElementById('itemsTableBody');
+                const onlyEmptyDefaultRow = tbody.rows.length === 1 &&
+                    !tbody.querySelector('.item-code-input').value.trim() &&
+                    !tbody.querySelector('.item-name-input').value.trim();
+                if (onlyEmptyDefaultRow) tbody.innerHTML = '';
+                hasImportedAnyPDF = true;
+            }
+            mergeProductsIntoTable(parsedProducts);
+        }
+
+        updatePreview();
+    }
+
+    // يضيف الأصناف المستخرجة إلى الجدول: لو الكود موجود بالفعل في صف قائم يجمع الكمية
+    // والكرتونة عليه (مفيد لو نفس الصنف اتكرر في أكتر من إذن تسليم مرفوع)، وإلا يضيف صف جديد
+    function mergeProductsIntoTable(newItems) {
+        const tbody = document.getElementById('itemsTableBody');
+        newItems.forEach(item => {
+            let existingRow = null;
+            if (item.code) {
+                const codeInputs = tbody.querySelectorAll('.item-code-input');
+                for (const input of codeInputs) {
+                    if (input.value.trim() === item.code) {
+                        existingRow = input.closest('tr');
+                        break;
+                    }
+                }
+            }
+
+            if (existingRow) {
+                const qtyInput = existingRow.querySelector('.item-qty-input');
+                const boxInput = existingRow.querySelector('.item-box-input');
+                qtyInput.value = (parseFloat(qtyInput.value) || 0) + item.units;
+                if (item.boxes !== '') {
+                    boxInput.value = (parseFloat(boxInput.value) || 0) + item.boxes;
+                }
+            } else {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="code-cell"><input type="text" value="${item.code || ''}" class="item-code-input" autocomplete="off" oninput="onCodeInput(this)" onfocus="showCodeSuggestions(this)"></td>
+                    <td><input type="text" value="${item.name}" class="item-name-input" oninput="updatePreview()"></td>
+                    <td><input type="number" value="${item.units}" class="item-qty-input" oninput="updatePreview()"></td>
+                    <td><input type="number" value="${item.boxes}" class="item-box-input" oninput="updatePreview()"></td>
+                    <td><button onclick="removeRow(this)" class="btn-delete-row" title="حذف هذا الصنف">🗑️</button></td>
+                `;
+                tbody.appendChild(tr);
+            }
+        });
+    }
+
+    // عند كتابة كود الصنف يتم جلب الاسم العربي فوراً لو الكود مطابق تماماً
+    function onCodeInput(codeElem) {
+        const val = codeElem.value.trim();
+        const row = codeElem.closest('tr');
+        const nameInput = row.querySelector('.item-name-input');
+
+        const matched = PRODUCT_DATABASE.find(p => p.code === val);
+        if (matched) nameInput.value = matched.ar;
+
+        showCodeSuggestions(codeElem);
+        updatePreview();
+    }
+
+    // قائمة اقتراحات مخصصة لكود الصنف: بتدور بالكود أو باسم الصنف (عربي/إنجليزي)
+    function showCodeSuggestions(codeElem) {
+        const box = document.getElementById('codeSuggestBox');
+        const query = codeElem.value.trim().toLowerCase();
+
+        let results;
+        if (!query) {
+            results = PRODUCT_DATABASE.slice();
+        } else {
+            results = PRODUCT_DATABASE.filter(p =>
+                p.code.toLowerCase().includes(query) ||
+                (p.ar && p.ar.toLowerCase().includes(query)) ||
+                (p.eng && p.eng.toLowerCase().includes(query))
+            );
+        }
+
+        if (results.length === 0) {
+            box.innerHTML = `<div class="suggest-empty">لا توجد أصناف مطابقة</div>`;
+        } else {
+            box.innerHTML = results.map(p => `
+                <div class="suggest-item" onmousedown="selectSuggestedCode(this, '${p.code}')">
+                    <span class="s-name">${p.ar}</span>
+                    <span class="s-code">${p.code}</span>
+                </div>
+            `).join('');
+        }
+
+        const rect = codeElem.getBoundingClientRect();
+        box.style.width = Math.max(rect.width, 240) + 'px';
+        box.style.top = (rect.bottom + 4) + 'px';
+        box.style.left = rect.left + 'px';
+        box.style.display = 'block';
+        box._activeInput = codeElem;
+    }
+
+    function selectSuggestedCode(itemEl, code) {
+        const box = document.getElementById('codeSuggestBox');
+        const codeElem = box._activeInput;
+        if (!codeElem) return;
+        codeElem.value = code;
+        onCodeInput(codeElem);
+        hideCodeSuggestions();
+    }
+
+    function hideCodeSuggestions() {
+        const box = document.getElementById('codeSuggestBox');
+        box.style.display = 'none';
+        box._activeInput = null;
+    }
+
+    document.addEventListener('click', function(e) {
+        const box = document.getElementById('codeSuggestBox');
+        if (!e.target.classList.contains('item-code-input') && !box.contains(e.target)) {
+            hideCodeSuggestions();
+        }
+    });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') hideCodeSuggestions();
+    });
+
+    function addNewRow() {
+        const tbody = document.getElementById('itemsTableBody');
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td class="code-cell"><input type="text" placeholder="الكود" class="item-code-input" autocomplete="off" oninput="onCodeInput(this)" onfocus="showCodeSuggestions(this)"></td>
+            <td><input type="text" placeholder="اسم الصنف بالعربي" class="item-name-input" oninput="updatePreview()"></td>
+            <td><input type="number" value="0" class="item-qty-input" oninput="updatePreview()"></td>
+            <td><input type="number" value="1" class="item-box-input" oninput="updatePreview()"></td>
+            <td><button onclick="removeRow(this)" class="btn-delete-row" title="حذف هذا الصنف">🗑️</button></td>
+        `;
+        tbody.appendChild(tr);
+        updatePreview();
+    }
+
+    function removeRow(btn) {
+        btn.closest('tr').remove();
+        updatePreview();
+    }
+
+    function updatePreview() {
+        document.getElementById('prevCustomer').innerText = document.getElementById('customerName').value || '--';
+        document.getElementById('prevAddress').innerText = document.getElementById('customerAddress').value || '--';
+        document.getElementById('prevDeliveryRef').innerText = document.getElementById('deliveryRef').value || '--';
+        document.getElementById('prevOrderRef').innerText = document.getElementById('orderRef').value || '--';
+
+        const rDate = document.getElementById('receiptDate').value;
+        if (rDate) {
+            const d = new Date(rDate);
+            const formattedDate = d.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
+            document.getElementById('prevDate').innerText = formattedDate;
+            document.getElementById('prevReceiptDate').innerText = formattedDate;
+        } else {
+            document.getElementById('prevDate').innerText = '--';
+            document.getElementById('prevReceiptDate').innerText = '--';
+        }
+
+        const codes = document.querySelectorAll('.item-code-input');
+        const names = document.querySelectorAll('.item-name-input');
+        const qtys = document.querySelectorAll('.item-qty-input');
+        const boxes = document.querySelectorAll('.item-box-input');
+
+        const prevTbody = document.getElementById('prevItemsBody');
+        prevTbody.innerHTML = '';
+
+        let totalBoxes = 0;
+        let totalUnits = 0;
+        let hasData = false;
+
+        names.forEach((input, index) => {
+            const name = input.value.trim();
+            const codeVal = codes[index] ? codes[index].value.trim() : '';
+            const qtyVal = parseInt(qtys[index] ? qtys[index].value : 0) || 0;
+            const boxVal = parseInt(boxes[index] ? boxes[index].value : 0) || 0;
+
+            if (name) {
+                hasData = true;
+                totalUnits += qtyVal;
+                totalBoxes += boxVal;
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td style="font-weight: bold; color: #2b6cb0;">${codeVal || '--'}</td>
+                    <td style="text-align: right; font-weight: 500;">${name}</td>
+                    <td>${qtyVal.toLocaleString()} قطعة</td>
+                    <td style="font-weight: bold; background-color: #f7fafc;">${boxVal} كرتونة</td>
+                    <td>سليم - حالة جيدة</td>
+                `;
+                prevTbody.appendChild(tr);
+            }
+        });
+
+        if (!hasData) {
+            prevTbody.innerHTML = '<tr><td colspan="6" style="color: #888;">لم يتم إضافة أصناف بعد</td></tr>';
+        }
+
+        document.getElementById('totalBoxesCount').innerText = totalBoxes;
+        document.getElementById('totalUnitsCount').innerText = totalUnits.toLocaleString();
+    }
+
+    // دالة الطباعة المنفصلة والنظيفة
+    function printReceipt() {
+        const receiptHtml = document.getElementById('printableReceipt').outerHTML;
+        
+        const printWindow = window.open('', '_blank', 'width=900,height=800');
+        printWindow.document.write(`
+            <html lang="ar" dir="rtl">
+            <head>
+                <title>طباعة إذن استلام بضاعة</title>
+                <style>
+                    * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+                    body { margin: 0; padding: 15mm; direction: rtl; background: #fff; color: #000; }
+                    .receipt-document { background: white; padding: 0; border: none; }
+                    .receipt-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #222; padding-bottom: 12px; margin-bottom: 15px; }
+                    .company-info h2 { margin: 0 0 4px 0; font-size: 18px; color: #1a365d; }
+                    .doc-title{text-align:center;background:none;border:none;padding:0;}.doc-title img{height:70px;display:block;}
+                    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 15px; font-size: 12px; background-color: #f8fafc; padding: 10px; border: 1px solid #e2e8f0; border-radius: 4px; }
+                    .receipt-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+                    .receipt-table th, .receipt-table td { border: 1px solid #333; padding: 6px 8px; text-align: center; font-size: 11px; }
+                    .receipt-table th { background-color: #edf2f7; font-weight: bold; }
+                    .receipt-summary { display: flex; justify-content: space-between; background: #edf2f7; padding: 8px 12px; border: 1px solid #333; font-weight: bold; font-size: 12px; margin-bottom: 20px; }
+                    .single-signature { margin-top: 40px; display: flex; justify-content: flex-end; }
+                    .signature-box-single { width: 250px; border-top: 1px solid #000; padding-top: 8px; text-align: center; font-size: 12px; }
+                    @page { size: A4 portrait; margin: 10mm; }
+                </style>
+            </head>
+            <body>
+                ${receiptHtml}
+                <script>
+                    window.onload = function() {
+                        window.print();
+                        setTimeout(function() { window.close(); }, 500);
+                    };
+                <\/script>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+    }
+
+    if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+            navigator.serviceWorker.register("sw.js").catch(() => {});
+        });
+    }
+</script>
+
+</body>
+</html>
